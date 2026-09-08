@@ -1,0 +1,7 @@
+{
+  "name": "LX MMA 외화손익 대시보드",
+  "description": "재무팀 자금담당용 매월 각 은행별 통화별 외화환산손익 및 환차손익 통합 대시보드",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
