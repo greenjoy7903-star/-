@@ -1,21 +1,113 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Configuration helper
+export function getSupabaseConfig(): { url: string; anonKey: string; isCustom: boolean } {
+  const customUrl = (typeof window !== 'undefined' ? localStorage.getItem('lx_mma_supabase_url') : '') || '';
+  const customKey = (typeof window !== 'undefined' ? localStorage.getItem('lx_mma_supabase_anon_key') : '') || '';
+  const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+  if (customUrl && customKey) {
+    return { url: customUrl.trim(), anonKey: customKey.trim(), isCustom: true };
+  }
+  return { url: envUrl.trim(), anonKey: envKey.trim(), isCustom: false };
+}
 
 export const isSupabaseConfigured = (): boolean => {
-  return Boolean(supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('http'));
+  const { url, anonKey } = getSupabaseConfig();
+  return Boolean(url && anonKey && url.startsWith('http'));
 };
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured()
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-    })
-  : null;
+let currentClient: SupabaseClient | null = null;
+
+function initClient(): SupabaseClient | null {
+  const { url, anonKey } = getSupabaseConfig();
+  if (url && anonKey && url.startsWith('http')) {
+    try {
+      currentClient = createClient(url, anonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      });
+      return currentClient;
+    } catch (e) {
+      console.error('Failed to initialize Supabase client:', e);
+      currentClient = null;
+      return null;
+    }
+  }
+  currentClient = null;
+  return null;
+}
+
+// Initial client creation
+initClient();
+
+export function saveSupabaseConfig(url: string, anonKey: string): boolean {
+  try {
+    localStorage.setItem('lx_mma_supabase_url', url.trim());
+    localStorage.setItem('lx_mma_supabase_anon_key', anonKey.trim());
+    initClient();
+    return true;
+  } catch (e) {
+    console.error('Failed to save Supabase config:', e);
+    return false;
+  }
+}
+
+export function resetSupabaseConfig(): void {
+  try {
+    localStorage.removeItem('lx_mma_supabase_url');
+    localStorage.removeItem('lx_mma_supabase_anon_key');
+    initClient();
+  } catch (e) {
+    console.error('Failed to reset Supabase config:', e);
+  }
+}
+
+export async function testSupabaseConnection(url?: string, anonKey?: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const config = getSupabaseConfig();
+    const targetUrl = (url !== undefined ? url : config.url).trim();
+    const targetKey = (anonKey !== undefined ? anonKey : config.anonKey).trim();
+
+    if (!targetUrl || !targetKey) {
+      return { success: false, message: 'URL과 Anon API Key를 모두 입력해 주세요.' };
+    }
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      return { success: false, message: 'URL은 https:// 로 시작해야 합니다.' };
+    }
+
+    const testClient = createClient(targetUrl, targetKey, {
+      auth: { persistSession: false },
+    });
+
+    const { error } = await testClient.auth.getSession();
+    if (error && !error.message.includes('Auth session missing')) {
+      return { success: false, message: `연결 오류: ${error.message}` };
+    }
+
+    return { success: true, message: 'Supabase 프로젝트에 정상적으로 연결되었습니다.' };
+  } catch (err: any) {
+    return { success: false, message: err.message || '연결 테스트 중 오류가 발생했습니다.' };
+  }
+}
+
+// Transparent proxy for supabase client
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    if (!currentClient) {
+      initClient();
+    }
+    if (!currentClient) {
+      return undefined;
+    }
+    const val = (currentClient as any)[prop];
+    return typeof val === 'function' ? val.bind(currentClient) : val;
+  },
+});
 
 export interface FxDbRecord {
   id?: string;

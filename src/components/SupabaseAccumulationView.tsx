@@ -20,7 +20,9 @@ import {
   ArrowDownToLine,
   History,
   Layers,
+  Settings2,
 } from 'lucide-react';
+import { SupabaseConfigModal } from './SupabaseConfigModal';
 
 interface SupabaseAccumulationViewProps {
   currentAccounts: FxAccount[];
@@ -47,6 +49,7 @@ export const SupabaseAccumulationView: React.FC<SupabaseAccumulationViewProps> =
   const [filterBank, setFilterBank] = useState<string>('ALL');
 
   const [showSqlModal, setShowSqlModal] = useState<boolean>(false);
+  const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -371,6 +374,14 @@ export const SupabaseAccumulationView: React.FC<SupabaseAccumulationViewProps> =
         </div>
 
         <div className="flex items-center space-x-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowConfigModal(true)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold transition shadow-2xs"
+          >
+            <Settings2 className="w-3.5 h-3.5 text-slate-500" />
+            <span>연결 설정</span>
+          </button>
           <button
             type="button"
             onClick={() => setShowSqlModal(true)}
@@ -777,6 +788,15 @@ export const SupabaseAccumulationView: React.FC<SupabaseAccumulationViewProps> =
           </div>
         </div>
       )}
+
+      {/* Supabase Connection Config Modal */}
+      <SupabaseConfigModal
+        isOpen={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        onConfigChanged={() => {
+          fetchAccumulatedRecords();
+        }}
+      />
     </div>
   );
 };
