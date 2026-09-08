@@ -1,15 +1,18 @@
 import React from 'react';
-import { Building2, Calendar, FileSpreadsheet, HelpCircle, PlusCircle, Globe, RefreshCw } from 'lucide-react';
+import { Building2, Calendar, FileSpreadsheet, HelpCircle, PlusCircle, Globe, RefreshCw, LogOut, Database, UserCheck } from 'lucide-react';
 
 interface HeaderProps {
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
   onOpenAddModal: () => void;
   onOpenGuideModal: () => void;
+  onOpenSqlModal: () => void;
   onExportExcel: () => void;
   onResetData: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  userEmail?: string;
+  onSignOut: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,10 +20,13 @@ export const Header: React.FC<HeaderProps> = ({
   setSelectedMonth,
   onOpenAddModal,
   onOpenGuideModal,
+  onOpenSqlModal,
   onExportExcel,
   onResetData,
   activeTab,
   setActiveTab,
+  userEmail,
+  onSignOut,
 }) => {
   const months = ['2026년 5월', '2026년 6월', '2026년 7월', '2026년 8월 (현재)', '2026년 9월 (예상)'];
 
@@ -31,6 +37,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'charts', label: '월별 트렌드' },
     { id: 'simulation', label: '환율 시뮬레이션' },
     { id: 'ai', label: 'AI 재무 분석' },
+    { id: 'supabase', label: 'CSV 누적 저장 (Supabase)' },
   ];
 
   return (
@@ -62,6 +69,23 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Action Controls */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* User Profile Badge */}
+            {userEmail && (
+              <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg text-xs text-slate-700">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="font-medium max-w-[120px] sm:max-w-[180px] truncate" title={userEmail}>
+                  {userEmail}
+                </span>
+                <button
+                  onClick={onSignOut}
+                  className="ml-1 text-slate-400 hover:text-red-500 p-0.5 transition"
+                  title="로그아웃"
+                >
+                  <LogOut className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
             {/* Month Selector */}
             <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700">
               <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -106,6 +130,16 @@ export const Header: React.FC<HeaderProps> = ({
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
 
+            {/* SQL Guide */}
+            <button
+              onClick={onOpenSqlModal}
+              className="inline-flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-medium transition"
+              title="Supabase SQL 스크립트"
+            >
+              <Database className="w-3.5 h-3.5 text-sky-600" />
+              <span>SQL</span>
+            </button>
+
             {/* Guide */}
             <button
               onClick={onOpenGuideModal}
@@ -140,3 +174,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

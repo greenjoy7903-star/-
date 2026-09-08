@@ -9,12 +9,24 @@ import { FinancialStatementImpactView } from './components/FinancialStatementImp
 import { ChartsView } from './components/ChartsView';
 import { SimulationView } from './components/SimulationView';
 import { AiAdvisorView } from './components/AiAdvisorView';
+import { SupabaseAccumulationView } from './components/SupabaseAccumulationView';
 import { UserGuideModal } from './components/UserGuideModal';
 import { AddAccountModal } from './components/AddAccountModal';
+import { SqlScriptModal } from './components/SqlScriptModal';
+import { LoginView } from './components/LoginView';
 import { calculateTranslationGainLoss } from './utils/formatters';
 import { ALLOWED_BANKS } from './components/BankCurrencyTable';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 
 export default function App() {
+  // Authentication State
+  const [sessionUser, setSessionUser] = useState<{ email: string; isDemo?: boolean } | null>(() => {
+    const savedDemo = localStorage.getItem('lx_mma_auth_user');
+    return savedDemo ? JSON.parse(savedDemo) : null;
+  });
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+
+  // FX Accounts State
   const [accounts, setAccounts] = useState<FxAccount[]>(() => {
     const saved = localStorage.getItem('lx_mma_fx_accounts_v3');
     if (saved) {
@@ -34,11 +46,73 @@ export default function App() {
 
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState<boolean>(false);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState<boolean>(false);
   const [editingAccount, setEditingAccount] = useState<FxAccount | null>(null);
+
+  // Check active Supabase session on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        if (isSupabaseConfigured() && supabase) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user) {
+            const userObj = { email: data.session.user.email || 'user@lxmma.com' };
+            setSessionUser(userObj);
+            localStorage.setItem('lx_mma_auth_user', JSON.stringify(userObj));
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase auth session check:', err);
+      } finally {
+        setIsAuthChecking(false);
+      }
+    };
+
+    checkAuth();
+
+    if (isSupabaseConfigured() && supabase) {
+      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          const userObj = { email: session.user.email || 'user@lxmma.com' };
+          setSessionUser(userObj);
+          localStorage.setItem('lx_mma_auth_user', JSON.stringify(userObj));
+        } else {
+          // If signed out from Supabase
+          if (!sessionUser?.isDemo) {
+            setSessionUser(null);
+            localStorage.removeItem('lx_mma_auth_user');
+          }
+        }
+      });
+
+      return () => {
+        authListener.subscription.unsubscribe();
+      };
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('lx_mma_fx_accounts_v3', JSON.stringify(accounts));
   }, [accounts]);
+
+  const handleLoginSuccess = (user: { email: string; isDemo?: boolean }) => {
+    setSessionUser(user);
+    localStorage.setItem('lx_mma_auth_user', JSON.stringify(user));
+  };
+
+  const handleSignOut = async () => {
+    if (window.confirm('로그아웃 하시겠습니까?')) {
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          await supabase.auth.signOut();
+        } catch (err) {
+          console.error('Sign out error:', err);
+        }
+      }
+      setSessionUser(null);
+      localStorage.removeItem('lx_mma_auth_user');
+    }
+  };
 
   const handleSaveAccount = (account: FxAccount) => {
     setAccounts((prev) => {
@@ -102,6 +176,18 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  // Callback to load accumulated historical data from Supabase into main view
+  const handleApplyHistoricalData = (historicalAccounts: FxAccount[], month: string) => {
+    setAccounts(historicalAccounts);
+    setSelectedMonth(month);
+    setActiveTab('table');
+  };
+
+  // If user is not authenticated, show Login Screen
+  if (!sessionUser && !isAuthChecking) {
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans antialiased selection:bg-sky-100 selection:text-sky-900">
       {/* Header */}
@@ -110,10 +196,13 @@ export default function App() {
         setSelectedMonth={setSelectedMonth}
         onOpenAddModal={handleOpenAddModal}
         onOpenGuideModal={() => setIsGuideModalOpen(true)}
+        onOpenSqlModal={() => setIsSqlModalOpen(true)}
         onExportExcel={handleExportExcel}
         onResetData={handleResetData}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        userEmail={sessionUser?.email}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Content Area */}
@@ -153,12 +242,21 @@ export default function App() {
         {activeTab === 'ai' && (
           <AiAdvisorView accounts={accounts} selectedMonth={selectedMonth} />
         )}
+
+        {activeTab === 'supabase' && (
+          <SupabaseAccumulationView
+            currentAccounts={accounts}
+            selectedMonth={selectedMonth}
+            userEmail={sessionUser?.email || ''}
+            onApplyHistoricalDataToDashboard={handleApplyHistoricalData}
+          />
+        )}
       </main>
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200/80 py-5 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>(주) LX MMA 재무 자금팀 • 외화 손익 관리 대시보드</span>
+          <span>(주) LX MMA 재무 자금팀 • 외화 손익 관리 대시보드 (Supabase Auth & Database)</span>
           <span>Google AI Studio Powered</span>
         </div>
       </footer>
@@ -175,6 +273,12 @@ export default function App() {
         isOpen={isGuideModalOpen}
         onClose={() => setIsGuideModalOpen(false)}
       />
+
+      <SqlScriptModal
+        isOpen={isSqlModalOpen}
+        onClose={() => setIsSqlModalOpen(false)}
+      />
     </div>
   );
 }
+
